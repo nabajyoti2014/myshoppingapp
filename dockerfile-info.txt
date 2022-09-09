@@ -1,0 +1,56 @@
+Dockerfile consists of 2 main parts. The first is to build the application and the 
+second is to run the application. If we look at what the commands are in the file;
+
+FROM part where the base image is specified in whichever library the FROM project is 
+used in. We will use dotnet core 3.1 SDK image in this project.
+
+WORKDIR It is the part where we specify the folder under which the docker container 
+will copy the files of our project.
+
+COPY is the command used to copy project files from local file system to image. In 
+our project, we will first copy and restore the csproj file, then copy all these 
+files again and create our application by running the dotnet publish command.
+
+RUN: It is used for commands that need to run while Docker containers are being 
+prepared. First, it is ensured that the build is taken and then it is published.
+
+ENTRYPOINT is the command that we specify the first command and parameters that will 
+run when the container is up. While the container is running, Shopping.Client.dll will 
+be executed with the dotnet command.
+
+
+FROM mcr.microsoft.com/dotnet/aspnet:3.1-buster-slim AS base
+WORKDIR /app
+EXPOSE 80
+EXPOSE 443
+The lines in the Dockerfile begin with the ASP.NET image from Microsoft Container 
+Registry (mcr.microsoft.com) and create an intermediate image base that exposes ports
+80 and 443, and sets the working directory to /app.
+
+FROM mcr.microsoft.com/dotnet/sdk:3.1-buster-slim AS build
+WORKDIR /src
+COPY ["WebApplication43/WebApplication43.csproj", "WebApplication43/"]
+RUN dotnet restore "WebApplication43/WebApplication43.csproj"
+COPY . .
+WORKDIR "/src/WebApplication43"
+RUN dotnet build "WebApplication43.csproj" -c Release -o /app/build
+The build stage starts from a different original image from the registry (sdk rather 
+than aspnet), rather than continuing from base. The sdk image has all the build tools,
+and for that reason it's a lot bigger than the aspnet image, which only contains 
+runtime components. The reason for using a separate image becomes clear when you 
+look at the rest of the Dockerfile:
+
+FROM build AS publish
+RUN dotnet publish "WebApplication43.csproj" -c Release -o /app/publish
+
+FROM base AS final
+WORKDIR /app
+COPY --from=publish /app/publish .
+ENTRYPOINT ["dotnet", "WebApplication43.dll"]
+The final stage starts again from base, and includes the COPY --from=publish to copy 
+the published output to the final image. This process makes it possible for the final 
+image to be a lot smaller, since it doesn't need to include all of the build tools 
+that were in the sdk image.
+
+
+
